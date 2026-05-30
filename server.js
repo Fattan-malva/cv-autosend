@@ -269,7 +269,11 @@ app.post('/api/upload-cv', (req, res) => {
       return res.status(400).json({ error: 'Tidak ada file CV yang diupload.' });
     }
     try {
-      const cvPath = path.join(__dirname, 'resource', 'cv.pdf');
+      const cvDir = path.join(__dirname, 'resource');
+      const cvPath = path.join(cvDir, 'cv.pdf');
+      if (!fs.existsSync(cvDir)) {
+        fs.mkdirSync(cvDir, { recursive: true });
+      }
       if (fs.existsSync(cvPath)) {
         fs.unlinkSync(cvPath);
       }
