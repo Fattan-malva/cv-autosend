@@ -106,6 +106,7 @@ function buildAnalysisPrompt(senderName) {
   "email_tujuan": "email untuk mengirim lamaran (string, kosongkan jika tidak ditemukan)",
   "nama_perusahaan": "nama perusahaan",
   "posisi": "posisi yang dibuka",
+  "subjek": "subjek email yang ditentukan di brosus (string, kosongkan jika brosur tidak menyebutkan subjek secara spesifik. Contoh: 'IT_NAMA' atau 'Lamaran - Staff IT')",
   "requirements": ["kualifikasi atau requirements pekerjaan yang disebutkan dalam brosur"],
   "kata_pengantar": "Tulis surat lamaran kerja via email yang profesional, sopan, dan berbahasa Indonesia yang baik. Surat harus: (1) memperkenalkan diri sebagai ${senderName}, (2) menyebutkan posisi dan perusahaan yang dilamar, (3) menyebutkan 1-2 kualifikasi atau keahlian pelamar yang relevan dengan kebutuhan perusahaan berdasarkan requirements brosur, (4) menyatakan minat dan kesiapan untuk berkontribusi, (5) menutup dengan harapan dapat diwawancarai. Jangan gunakan template kaku, buatlah sealami mungkin. Akhiri dengan 'Hormat saya,\\n${senderName}' tanpa placeholder lagi."
 }`;

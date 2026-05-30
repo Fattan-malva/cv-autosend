@@ -439,8 +439,9 @@
     }
 
     function createCard(data, index, fileName) {
-      const subjectDefault = `Lamaran Pekerjaan - ${data.posisi || 'Staff'} - ${data.nama_perusahaan || ''}`;
       const senderName = state.senderName || 'Nama Lengkap';
+      const subjekBrosur = (data.subjek || '').replace(/NAMA/gi, senderName);
+      const subjectDefault = subjekBrosur || `Lamaran Pekerjaan - ${data.posisi || 'Staff'} - ${data.nama_perusahaan || ''}`;
       const cleanBody = (data.kata_pengantar || '')
         .replace(/\[Nama Anda\]/gi, senderName)
         .replace(/\[Nama Lengkap\]/gi, senderName)
