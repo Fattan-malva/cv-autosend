@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="id" class="">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Job Application Automator</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: { primary: { 50: '#eef2ff', 100: '#e0e7ff', 200: '#c7d2fe', 300: '#a5b4fc', 400: '#818cf8', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca', 800: '#3730a3', 900: '#312e81' } }
+        }
+      }
+    }
+  </script>
+  <style>
+    ::-webkit-scrollbar { display: none; }
+    * { scrollbar-width: none; -ms-overflow-style: none; }
+    body { overflow-y: scroll; }
+
+    .drag-over { background-color: rgba(99,102,241,0.08) !important; border-color: #6366f1 !important; }
+    .dark .drag-over { background-color: rgba(99,102,241,0.15) !important; border-color: #818cf8 !important; }
+
+    .fade-in { animation: fadeIn .3s ease-in; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+    .spinner { border: 3px solid; border-radius: 50%; width: 20px; height: 20px; animation: spin .6s linear infinite; display: inline-block; }
+    .spinner { border-color: #e5e7eb; border-top-color: #6366f1; }
+    .dark .spinner { border-color: #374151; border-top-color: #818cf8; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .settings-panel { transition: transform .3s ease, opacity .3s ease; }
+    .settings-open { transform: translateX(0) !important; opacity: 1 !important; pointer-events: auto !important; }
+    .settings-closed { transform: translateX(100%); opacity: 0; pointer-events: none; }
+  </style>
+</head>
+<body class="bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-950 dark:to-gray-900 min-h-screen text-gray-900 dark:text-gray-100 transition-colors duration-200">
+
+  <!-- Dark mode toggle -->
+  <button id="themeToggle" class="fixed top-4 right-4 z-30 w-10 h-10 rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm flex items-center justify-center text-lg hover:shadow-md transition cursor-pointer">
+    <span id="themeIcon">🌙</span>
+  </button>
+
+  <!-- Settings button -->
+  <button id="settingsToggle" class="fixed top-4 right-16 z-30 w-10 h-10 rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm flex items-center justify-center text-lg hover:shadow-md transition cursor-pointer">
+    ⚙️
+  </button>
+
+  <!-- Settings panel -->
+  <div id="settingsPanel" class="settings-panel settings-closed fixed top-0 right-0 z-40 w-full max-w-sm h-full bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-700 shadow-2xl p-6 overflow-y-auto">
+    <div class="flex items-center justify-between mb-6">
+      <h2 class="text-lg font-bold">Pengaturan</h2>
+      <button id="settingsClose" class="w-8 h-8 rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-sm hover:bg-gray-200 dark:hover:bg-gray-700 transition cursor-pointer">✕</button>
+    </div>
+
+    <div class="space-y-5">
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Nama Pengirim</label>
+        <p class="text-xs text-gray-500 dark:text-gray-400 mb-2">Nama ini akan digunakan di body email sebagai pengganti [Nama Lengkap]</p>
+        <input type="text" id="senderNameInput" value="" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 focus:ring-2 focus:ring-indigo-500 outline-none transition" />
+        <button id="saveNameBtn" class="mt-2 px-4 py-1.5 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 font-medium transition disabled:opacity-50">Simpan Nama</button>
+        <span id="nameSaved" class="ml-2 text-xs text-green-600 dark:text-green-400 hidden">Tersimpan ✓</span>
+      </div>
+
+      <hr class="border-gray-200 dark:border-gray-700" />
+
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">CV (PDF)</label>
+        <p class="text-xs text-gray-500 dark:text-gray-400 mb-2">Upload file CV terbaru. File akan disimpan sebagai <code class="bg-gray-100 dark:bg-gray-800 px-1 rounded">resource/cv.pdf</code></p>
+        <div class="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-4 text-center">
+          <input type="file" id="cvInput" accept=".pdf,application/pdf" class="hidden" />
+          <label for="cvInput" class="cursor-pointer text-indigo-600 dark:text-indigo-400 text-sm font-medium hover:underline">Pilih file PDF</label>
+          <p class="text-xs text-gray-400 mt-1" id="cvStatus">Belum ada CV</p>
+        </div>
+      </div>
+
+      <hr class="border-gray-200 dark:border-gray-700" />
+
+      <div class="text-xs text-gray-400 dark:text-gray-500">
+        <p><strong>Info Server:</strong></p>
+        <p id="serverInfo">Memuat...</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Overlay for settings -->
+  <div id="settingsOverlay" class="fixed inset-0 z-30 bg-black/30 opacity-0 pointer-events-none transition-opacity duration-300"></div>
+
+  <!-- Main content -->
+  <div class="max-w-5xl mx-auto px-4 py-8">
+    <!-- Header -->
+    <div class="bg-white dark:bg-gray-800/80 backdrop-blur rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 mb-6">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/50 rounded-lg flex items-center justify-center text-xl shrink-0">🚀</div>
+        <div>
+          <h1 class="text-2xl font-bold">AI Job Application Assistant</h1>
+          <p class="text-gray-500 dark:text-gray-400 text-sm">Upload brosur loker &rarr; Analisis AI &rarr; Review &rarr; Kirim email + CV</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- Left: Upload Section -->
+      <div class="lg:col-span-1">
+        <div class="bg-white dark:bg-gray-800/80 backdrop-blur rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+          <h2 class="font-semibold mb-3">Upload Brosur</h2>
+
+          <!-- Drop zone -->
+          <div id="dropZone" class="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-8 text-center transition-colors hover:border-indigo-400 dark:hover:border-indigo-400 cursor-pointer">
+            <div class="text-4xl mb-2">📄</div>
+            <p class="text-sm text-gray-600 dark:text-gray-400">Seret gambar ke sini</p>
+            <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">atau</p>
+            <button type="button" id="pickFileBtn" class="inline-block mt-2 px-4 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 cursor-pointer transition pointer-events-auto">Pilih File</button>
+            <input type="file" id="fileInput" multiple accept="image/*" class="hidden" />
+            <p class="text-xs text-gray-400 dark:text-gray-500 mt-2">JPEG, PNG, WebP, GIF &bull; Maks 10MB/file &bull; Maks 20 file</p>
+          </div>
+
+          <!-- Selected files summary -->
+          <div id="fileSummary" class="mt-3 hidden">
+            <div class="flex items-center justify-between bg-gray-50 dark:bg-gray-700/50 rounded-lg px-3 py-2 text-sm">
+              <span id="fileCount" class="font-medium">0 file dipilih</span>
+              <button id="clearFilesBtn" class="text-red-500 hover:text-red-700 dark:hover:text-red-400 text-xs font-medium cursor-pointer">Hapus semua</button>
+            </div>
+            <div id="fileNameList" class="mt-2 text-xs text-gray-500 dark:text-gray-400 space-y-1 max-h-24 overflow-y-auto"></div>
+          </div>
+
+          <button id="uploadBtn" class="w-full mt-4 bg-indigo-600 text-white py-2.5 rounded-lg hover:bg-indigo-700 font-medium transition hidden disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer">
+            Analisis dengan AI
+          </button>
+
+          <!-- Loading -->
+          <div id="loading" class="hidden mt-4">
+            <div class="flex items-center gap-3 p-3 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded-lg">
+              <div class="spinner"></div>
+              <div>
+                <p class="text-sm font-medium text-amber-800 dark:text-amber-300">Menganalisis gambar...</p>
+                <p id="progressText" class="text-xs text-amber-600 dark:text-amber-400">0 / 0 selesai</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tips -->
+        <div class="bg-white dark:bg-gray-800/80 backdrop-blur rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-5 mt-4">
+          <h3 class="font-semibold text-sm mb-2">Tips</h3>
+          <ul class="text-xs text-gray-500 dark:text-gray-400 space-y-1.5 list-disc list-inside">
+            <li>Pastikan brosur menyertakan <strong>email tujuan</strong></li>
+            <li>Gunakan gambar dengan teks yang jelas</li>
+            <li>Review hasil AI sebelum kirim</li>
+            <li>Atur nama pengirim di ⚙️ <strong>Pengaturan</strong></li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Right: Review Section -->
+      <div class="lg:col-span-2">
+        <div id="emptyState" class="bg-white dark:bg-gray-800/80 backdrop-blur rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-12 text-center">
+          <div class="text-5xl mb-4">📋</div>
+          <h2 class="text-lg font-semibold text-gray-700 dark:text-gray-300">Belum ada hasil analisis</h2>
+          <p class="text-sm text-gray-400 dark:text-gray-500 mt-1">Upload brosur lowongan dan klik tombol analisis untuk memulai.</p>
+        </div>
+
+        <div id="reviewSection" class="hidden">
+          <!-- Batch actions bar -->
+          <div class="bg-white dark:bg-gray-800/80 backdrop-blur rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 mb-4 flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <h2 class="font-semibold">Hasil Analisis</h2>
+              <p id="reviewSummary" class="text-xs text-gray-500 dark:text-gray-400">0 brosur siap dikirim</p>
+            </div>
+            <div class="flex gap-2 flex-wrap">
+              <button id="expandAllBtn" class="text-xs px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition cursor-pointer">Expand All</button>
+              <button id="collapseAllBtn" class="text-xs px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition cursor-pointer">Collapse All</button>
+              <button id="sendAllBtn" class="px-4 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 font-medium transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer">
+                Kirim Semua
+              </button>
+            </div>
+          </div>
+
+          <div id="reviewContainer" class="space-y-4"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="fixed bottom-6 right-6 bg-gray-900 dark:bg-gray-700 text-white px-5 py-3 rounded-xl shadow-lg text-sm font-medium transition-all duration-300 translate-y-4 opacity-0 pointer-events-none max-w-sm z-50"></div>
+
+  <script>
+    // ── State ────────────────────────────────────────────────────────────
+    const state = { results: [], collapsed: {}, senderName: '' };
+
+    // ── Theme ─────────────────────────────────────────────────────────────
+    const html = document.documentElement;
+    const themeIcon = document.getElementById('themeIcon');
+    const stored = localStorage.getItem('theme');
+    if (stored === 'dark' || (!stored && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      html.classList.add('dark');
+      themeIcon.textContent = '☀️';
+    }
+
+    document.getElementById('themeToggle').addEventListener('click', () => {
+      const isDark = html.classList.toggle('dark');
+      themeIcon.textContent = isDark ? '☀️' : '🌙';
+      localStorage.setItem('theme', isDark ? 'dark' : 'light');
+    });
+
+    // ── DOM refs ──────────────────────────────────────────────────────────
+    const dropZone = document.getElementById('dropZone');
+    const pickFileBtn = document.getElementById('pickFileBtn');
+    const fileInput = document.getElementById('fileInput');
+    const fileSummary = document.getElementById('fileSummary');
+    const fileCount = document.getElementById('fileCount');
+    const fileNameList = document.getElementById('fileNameList');
+    const clearFilesBtn = document.getElementById('clearFilesBtn');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const loading = document.getElementById('loading');
+    const progressText = document.getElementById('progressText');
+    const emptyState = document.getElementById('emptyState');
+    const reviewSection = document.getElementById('reviewSection');
+    const reviewContainer = document.getElementById('reviewContainer');
+    const reviewSummary = document.getElementById('reviewSummary');
+    const sendAllBtn = document.getElementById('sendAllBtn');
+    const expandAllBtn = document.getElementById('expandAllBtn');
+    const collapseAllBtn = document.getElementById('collapseAllBtn');
+    const toast = document.getElementById('toast');
+
+    // Settings
+    const settingsPanel = document.getElementById('settingsPanel');
+    const settingsToggle = document.getElementById('settingsToggle');
+    const settingsClose = document.getElementById('settingsClose');
+    const settingsOverlay = document.getElementById('settingsOverlay');
+    const senderNameInput = document.getElementById('senderNameInput');
+    const saveNameBtn = document.getElementById('saveNameBtn');
+    const nameSaved = document.getElementById('nameSaved');
+    const cvInput = document.getElementById('cvInput');
+    const cvStatus = document.getElementById('cvStatus');
+    const serverInfo = document.getElementById('serverInfo');
+
+    // ── Settings panel open/close ────────────────────────────────────────
+    function openSettings() {
+      settingsPanel.classList.remove('settings-closed');
+      settingsPanel.classList.add('settings-open');
+      settingsOverlay.classList.remove('opacity-0', 'pointer-events-none');
+      settingsOverlay.classList.add('opacity-100');
+    }
+    function closeSettings() {
+      settingsPanel.classList.remove('settings-open');
+      settingsPanel.classList.add('settings-closed');
+      settingsOverlay.classList.remove('opacity-100');
+      settingsOverlay.classList.add('opacity-0', 'pointer-events-none');
+    }
+    settingsToggle.addEventListener('click', openSettings);
+    settingsClose.addEventListener('click', closeSettings);
+    settingsOverlay.addEventListener('click', closeSettings);
+
+    // ── Toast ─────────────────────────────────────────────────────────────
+    let toastTimer;
+    function showToast(msg, type = 'info') {
+      clearTimeout(toastTimer);
+      toast.textContent = msg;
+      toast.className = 'fixed bottom-6 right-6 px-5 py-3 rounded-xl shadow-lg text-sm font-medium transition-all duration-300 max-w-sm z-50 ' +
+        (type === 'success' ? 'bg-green-700' : type === 'error' ? 'bg-red-700' : 'bg-gray-900 dark:bg-gray-700');
+      toast.classList.remove('translate-y-4', 'opacity-0', 'pointer-events-none');
+      toast.classList.add('translate-y-0', 'opacity-100');
+      toastTimer = setTimeout(() => {
+        toast.classList.add('translate-y-4', 'opacity-0', 'pointer-events-none');
+        toast.classList.remove('translate-y-0', 'opacity-100');
+      }, 3500);
+    }
+
+    // ── Load config ───────────────────────────────────────────────────────
+    async function loadConfig() {
+      try {
+        const res = await fetch('/api/config');
+        const cfg = await res.json();
+        state.senderName = cfg.SENDER_NAME || '';
+        senderNameInput.value = state.senderName;
+        cvStatus.textContent = cfg.hasCV ? 'CV tersedia ✓' : 'Belum ada CV';
+        serverInfo.innerHTML = `SMTP: ${cfg.SMTP_SERVER || '—'}<br/>Email: ${cfg.SENDER_EMAIL || '—'}`;
+      } catch { serverInfo.textContent = 'Gagal memuat konfigurasi.'; }
+    }
+    loadConfig();
+
+    // ── Save sender name ──────────────────────────────────────────────────
+    saveNameBtn.addEventListener('click', async () => {
+      const name = senderNameInput.value.trim();
+      if (!name) { showToast('Nama tidak boleh kosong', 'error'); return; }
+      saveNameBtn.disabled = true;
+      saveNameBtn.textContent = 'Menyimpan...';
+      try {
+        const res = await fetch('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ SENDER_NAME: name }),
+        });
+        if (res.ok) {
+          state.senderName = name;
+          nameSaved.classList.remove('hidden');
+          setTimeout(() => nameSaved.classList.add('hidden'), 2000);
+          showToast('Nama pengirim berhasil disimpan', 'success');
+        } else {
+          showToast('Gagal menyimpan', 'error');
+        }
+      } catch { showToast('Gagal menyimpan', 'error'); }
+      finally { saveNameBtn.disabled = false; saveNameBtn.textContent = 'Simpan Nama'; }
+    });
+
+    // ── Upload CV ─────────────────────────────────────────────────────────
+    cvInput.addEventListener('change', async () => {
+      const file = cvInput.files[0];
+      if (!file) return;
+      if (file.type !== 'application/pdf') { showToast('File harus PDF', 'error'); return; }
+      if (file.size > 10 * 1024 * 1024) { showToast('File terlalu besar (maks 10MB)', 'error'); return; }
+
+      cvStatus.textContent = 'Mengupload...';
+      const fd = new FormData();
+      fd.append('cv', file);
+      try {
+        const res = await fetch('/api/upload-cv', { method: 'POST', body: fd });
+        if (res.ok) {
+          cvStatus.textContent = 'CV tersedia ✓';
+          showToast('CV berhasil diupload', 'success');
+        } else {
+          const err = await res.json().catch(() => ({}));
+          showToast(err.error || 'Gagal upload CV', 'error');
+          cvStatus.textContent = 'Gagal upload';
+        }
+      } catch { showToast('Gagal upload CV', 'error'); cvStatus.textContent = 'Gagal upload'; }
+    });
+
+    // ── File selection ────────────────────────────────────────────────────
+    function updateFileSummary() {
+      const files = fileInput.files;
+      if (files.length > 0) {
+        fileSummary.classList.remove('hidden');
+        fileCount.textContent = `${files.length} file dipilih`;
+        fileNameList.innerHTML = Array.from(files).map(f =>
+          `<div class="flex items-center gap-1"><span class="text-gray-400">•</span> ${f.name}</div>`
+        ).join('');
+        uploadBtn.classList.remove('hidden');
+      } else {
+        fileSummary.classList.add('hidden');
+        uploadBtn.classList.add('hidden');
+      }
+    }
+
+    fileInput.addEventListener('change', updateFileSummary);
+    clearFilesBtn.addEventListener('click', () => {
+      fileInput.value = '';
+      updateFileSummary();
+    });
+
+    // Fixed: click only via button, not on entire dropZone
+    pickFileBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      fileInput.click();
+    });
+
+    // ── Drag & Drop ──────────────────────────────────────────────────────
+    ['dragenter', 'dragover'].forEach(evt => {
+      dropZone.addEventListener(evt, (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+    });
+    ['dragleave', 'drop'].forEach(evt => {
+      dropZone.addEventListener(evt, (e) => { e.preventDefault(); dropZone.classList.remove('drag-over'); });
+    });
+    dropZone.addEventListener('drop', (e) => {
+      const dt = e.dataTransfer;
+      if (dt.files.length) {
+        fileInput.files = dt.files;
+        fileInput.dispatchEvent(new Event('change'));
+      }
+    });
+
+    // ── Analyze ──────────────────────────────────────────────────────────
+    uploadBtn.addEventListener('click', async () => {
+      const files = fileInput.files;
+      if (!files.length) return;
+
+      const formData = new FormData();
+      for (const f of files) formData.append('brosur', f);
+
+      reviewContainer.innerHTML = '';
+      reviewSection.classList.add('hidden');
+      emptyState.classList.remove('hidden');
+      loading.classList.remove('hidden');
+      uploadBtn.disabled = true;
+      progressText.textContent = `0 / ${files.length} selesai`;
+
+      try {
+        const res = await fetch('/api/analyze', { method: 'POST', body: formData });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || `Server error (${res.status})`);
+        }
+        state.results = await res.json();
+
+        loading.classList.add('hidden');
+        emptyState.classList.add('hidden');
+        reviewSection.classList.remove('hidden');
+        renderResults();
+        showToast(`${state.results.filter(r => r.status === 'success').length} brosur berhasil dianalisis`, 'success');
+      } catch (err) {
+        showToast('Gagal: ' + err.message, 'error');
+        loading.classList.add('hidden');
+      } finally {
+        uploadBtn.disabled = false;
+      }
+    });
+
+    // ── Render review cards ──────────────────────────────────────────────
+    function renderResults() {
+      reviewContainer.innerHTML = '';
+      state.results.forEach((res, idx) => {
+        if (res.status === 'success') {
+          reviewContainer.appendChild(createCard(res.data, idx, res.fileName));
+        } else {
+          reviewContainer.innerHTML += `
+            <div class="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-xl p-4 text-red-700 dark:text-red-300 text-sm fade-in">
+              ❌ <strong>${res.fileName}</strong>: ${res.message}
+            </div>`;
+        }
+      });
+      state.collapsed = {};
+      updateSummary();
+    }
+
+    function createCard(data, index, fileName) {
+      const subjectDefault = `Lamaran Pekerjaan - ${data.posisi || 'Staff'} - ${data.nama_perusahaan || ''}`;
+      const senderName = state.senderName || 'Nama Lengkap';
+      const cleanBody = (data.kata_pengantar || '')
+        .replace(/\[Nama Anda\]/gi, senderName)
+        .replace(/\[Nama Lengkap\]/gi, senderName)
+        .replace(/\[Nama\]/gi, senderName);
+      const emailVal = data.email_tujuan || '';
+      const reqs = Array.isArray(data.requirements) ? data.requirements : [];
+
+      const card = document.createElement('div');
+      card.className = 'bg-white dark:bg-gray-800/80 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm fade-in overflow-hidden';
+      card.dataset.index = index;
+
+      const isCollapsed = index > 2;
+      if (isCollapsed) state.collapsed[index] = true;
+
+      const reqsHtml = reqs.length ? `
+        <div class="bg-indigo-50 dark:bg-indigo-900/20 rounded-lg p-3 mb-3">
+          <p class="text-xs font-semibold text-indigo-600 dark:text-indigo-400 uppercase tracking-wide mb-1">Requirements dari brosur</p>
+          <ul class="text-xs text-gray-600 dark:text-gray-300 space-y-0.5 list-disc list-inside">
+            ${reqs.map(r => `<li>${r}</li>`).join('')}
+          </ul>
+        </div>` : '';
+
+      card.innerHTML = `
+        <div class="flex items-center justify-between px-5 py-3 border-b border-gray-100 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition" data-toggle="${index}">
+          <div class="flex items-center gap-3 min-w-0">
+            <span class="w-7 h-7 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 rounded-full flex items-center justify-center text-xs font-bold shrink-0">${index + 1}</span>
+            <div class="min-w-0">
+              <p class="text-sm font-medium truncate">${fileName}</p>
+              <p class="text-xs text-gray-400 dark:text-gray-500 truncate">${data.nama_perusahaan || 'Perusahaan tidak dikenal'} ${data.posisi ? '— ' + data.posisi : ''}</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <span id="status-${index}" class="text-xs px-2 py-0.5 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 rounded-full font-medium">Siap</span>
+            <svg class="w-4 h-4 text-gray-400 transition-transform ${isCollapsed ? '' : 'rotate-180'}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </div>
+        </div>
+        <div class="${isCollapsed ? 'hidden' : ''}" data-body="${index}">
+          <div class="p-5 space-y-3">
+            ${reqsHtml}
+            <div>
+              <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Email Tujuan</label>
+              <input type="text" id="email-${index}" value="${emailVal}" placeholder="email@perusahaan.com" class="w-full mt-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 focus:ring-2 focus:ring-indigo-500 outline-none transition" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Subjek Email</label>
+              <input type="text" id="subject-${index}" value="${subjectDefault}" class="w-full mt-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 focus:ring-2 focus:ring-indigo-500 outline-none transition" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Isi Email</label>
+              <textarea id="body-${index}" rows="5" class="w-full mt-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-800 focus:ring-2 focus:ring-indigo-500 outline-none transition resize-y">${cleanBody}</textarea>
+            </div>
+            <div class="flex items-center justify-between pt-1">
+              <div class="text-xs text-gray-400 dark:text-gray-500">CV akan dilampirkan otomatis</div>
+              <button onclick="sendSingle(${index})" id="btn-${index}" class="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 font-medium transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer">
+                Kirim Lamaran
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      card.querySelector('[data-toggle]').addEventListener('click', () => {
+        const body = card.querySelector(`[data-body="${index}"]`);
+        const icon = card.querySelector('svg');
+        const isNowHidden = body.classList.toggle('hidden');
+        state.collapsed[index] = isNowHidden;
+        icon.classList.toggle('rotate-180', !isNowHidden);
+      });
+
+      return card;
+    }
+
+    // ── Send single email ────────────────────────────────────────────────
+    async function sendSingle(index) {
+      const to = document.getElementById(`email-${index}`).value.trim();
+      const subject = document.getElementById(`subject-${index}`).value.trim();
+      const body = document.getElementById(`body-${index}`).value.trim();
+      const btn = document.getElementById(`btn-${index}`);
+      const status = document.getElementById(`status-${index}`);
+
+      if (!to) { showToast('Email tujuan tidak boleh kosong!', 'error'); return; }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) { showToast('Format email tidak valid!', 'error'); return; }
+
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Mengirim...';
+
+      try {
+        const res = await fetch('/api/send-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ to, subject, body }),
+        });
+        const result = await res.json();
+        if (res.ok) {
+          status.className = 'text-xs px-2 py-0.5 bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 rounded-full font-medium';
+          status.textContent = 'Terkirim';
+          btn.className = 'px-4 py-2 bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 text-sm rounded-lg cursor-not-allowed font-medium';
+          btn.textContent = 'Selesai';
+          showToast(`Email berhasil dikirim ke ${to}`, 'success');
+          updateSummary();
+        } else {
+          showToast(result.error || 'Gagal mengirim', 'error');
+          btn.disabled = false;
+          btn.textContent = 'Kirim Lamaran';
+        }
+      } catch {
+        showToast('Gagal mengirim email', 'error');
+        btn.disabled = false;
+        btn.textContent = 'Kirim Lamaran';
+      }
+    }
+
+    // ── Send all ──────────────────────────────────────────────────────────
+    sendAllBtn.addEventListener('click', async () => {
+      const successItems = state.results.filter(r => r.status === 'success');
+      const payload = [];
+
+      successItems.forEach((_, idx) => {
+        const to = document.getElementById(`email-${idx}`)?.value.trim();
+        const subject = document.getElementById(`subject-${idx}`)?.value.trim();
+        const body = document.getElementById(`body-${idx}`)?.value.trim();
+        const statusEl = document.getElementById(`status-${idx}`);
+        if (to && statusEl && statusEl.textContent !== 'Terkirim') {
+          payload.push({ to, subject, body, index: idx });
+        }
+      });
+
+      if (!payload.length) {
+        showToast('Tidak ada email yang perlu dikirim', 'info');
+        return;
+      }
+
+      sendAllBtn.disabled = true;
+      sendAllBtn.innerHTML = '<span class="spinner"></span> Mengirim...';
+
+      for (const item of payload) {
+        const btn = document.getElementById(`btn-${item.index}`);
+        const status = document.getElementById(`status-${item.index}`);
+        if (btn) btn.innerHTML = '<span class="spinner"></span>';
+
+        try {
+          const res = await fetch('/api/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ to: item.to, subject: item.subject, body: item.body }),
+          });
+          if (res.ok) {
+            if (status) { status.className = 'text-xs px-2 py-0.5 bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 rounded-full font-medium'; status.textContent = 'Terkirim'; }
+            if (btn) { btn.className = 'px-4 py-2 bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 text-sm rounded-lg cursor-not-allowed font-medium'; btn.textContent = 'Selesai'; }
+          }
+        } catch { /* skip */ }
+      }
+
+      sendAllBtn.disabled = false;
+      sendAllBtn.textContent = 'Kirim Semua';
+      showToast(`${payload.length} email diproses`, 'success');
+      updateSummary();
+    });
+
+    // ── Expand / Collapse all ─────────────────────────────────────────────
+    expandAllBtn.addEventListener('click', () => {
+      document.querySelectorAll('[data-body]').forEach(el => el.classList.remove('hidden'));
+      document.querySelectorAll('[data-toggle] svg').forEach(el => el.classList.add('rotate-180'));
+      state.collapsed = {};
+    });
+    collapseAllBtn.addEventListener('click', () => {
+      document.querySelectorAll('[data-body]').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('[data-toggle] svg').forEach(el => el.classList.remove('rotate-180'));
+      state.results.forEach((_, i) => { state.collapsed[i] = true; });
+    });
+
+    // ── Summary counter ───────────────────────────────────────────────────
+    function updateSummary() {
+      const total = state.results.filter(r => r.status === 'success').length;
+      const sent = document.querySelectorAll('[id^="status-"][class*="text-green"]').length;
+      reviewSummary.textContent = `${sent} / ${total} terkirim`;
+      sendAllBtn.textContent = sent === total ? 'Semua Terkirim' : `Kirim Semua (${total - sent})`;
+      sendAllBtn.disabled = sent === total;
+    }
+  </script>
+</body>
+</html>
