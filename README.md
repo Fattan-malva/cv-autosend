@@ -15,7 +15,7 @@ Upload brosur lowongan kerja → Analisis AI → Review & edit → Kirim email +
 ## Prasyarat
 
 - [Node.js](https://nodejs.org/) v18 atau lebih baru
-- Akun [9Router](https://9router.ai) untuk API key
+- Akun [9Router](https://github.com/decolua/9router.git) untuk API key
 - Akun email dengan **App Password** (untuk Gmail) atau SMTP server lain
 
 ## Setup Cepat
@@ -23,7 +23,7 @@ Upload brosur lowongan kerja → Analisis AI → Review & edit → Kirim email +
 ### 1. Clone & Install
 
 ```bash
-git clone https://github.com/username/cv-autosend.git
+git clone https://github.com/Fattan-malva/cv-autosend.git
 cd cv-autosend
 cp .env.example .env
 npm install
