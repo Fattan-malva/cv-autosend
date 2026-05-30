@@ -7,9 +7,15 @@
     "start": "node server.js",
     "dev": "node --watch server.js"
   },
-  "keywords": ["job-application", "ai", "email-automation", "cv"],
+  "keywords": [
+    "job-application",
+    "ai",
+    "email-automation",
+    "cv"
+  ],
   "license": "MIT",
   "dependencies": {
+    "@google/genai": "^2.7.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",

@@ -15,7 +15,7 @@ Upload brosur lowongan kerja → Analisis AI → Review & edit → Kirim email +
 ## Prasyarat
 
 - [Node.js](https://nodejs.org/) v18 atau lebih baru
-- Akun [9Router](https://github.com/decolua/9router.git) untuk API key
+- API key **9Router** (primer) atau **Google AI Studio** (fallback) — salah satu harus diisi
 - Akun email dengan **App Password** (untuk Gmail) atau SMTP server lain
 
 ## Setup Cepat
@@ -29,9 +29,11 @@ cp .env.example .env
 npm install
 ```
 
-### 2. Konfigurasi 9Router AI
+### 2. Konfigurasi AI Provider
 
-9Router menyediakan akses ke berbagai model AI (termasuk GPT-4o, Claude, dan model gratis).
+Aplikasi mencoba **9Router** terlebih dahulu. Jika gagal (timeout / error), otomatis fallback ke **Google AI Studio (Gemini)**.
+
+#### Opsi A: 9Router (primer)
 
 1. Setup AI dari [9Router](https://github.com/decolua/9router.git)
 2. Buat API Key dari dashboard
@@ -42,6 +44,20 @@ npm install
    ```
 
 > Model `ai-picture` dikhususkan untuk analisis gambar. Bisa juga pakai `gpt-4o` atau `free-models`.
+
+#### Opsi B: Google AI Studio (fallback)
+
+Google AI Studio (Gemini) otomatis dipakai jika 9Router tidak dikonfigurasi atau sedang error.
+
+1. Buka [Google AI Studio](https://aistudio.google.com/apikey) → klik **Get API Key**
+2. Buat API Key (gratis, ada free quota)
+3. Isi di `.env`:
+   ```env
+   GOOGLE_AI_STUDIO_API_KEY=AIzaxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+   GOOGLE_AI_STUDIO_MODEL=gemma-4-31b-it
+   ```
+
+> Model yang didukung: `gemma-4-31b-it` (cepat, ringan), `gemini-2.0-flash-exp` (lebih baru). Pastikan support **vision** (bisa baca gambar).
 
 ### 3. Setup App Password Gmail
 
@@ -125,9 +141,11 @@ Buka browser: **http://localhost:3000**
 
 | Variable | Wajib | Default | Deskripsi |
 |----------|-------|---------|-----------|
-| `9ROUTER_MODEL` | ✅ | `gpt-4o` | Model AI untuk analisis |
-| `9ROUTER_API_BASE` | ✅ | `https://api.9router.ai/v1` | Base URL 9Router |
-| `9ROUTER_API_KEY` | ✅ | — | API Key 9Router |
+| `9ROUTER_MODEL` | — | `gpt-4o` | Model 9Router untuk analisis |
+| `9ROUTER_API_BASE` | — | `https://api.9router.ai/v1` | Base URL 9Router |
+| `9ROUTER_API_KEY` | — | — | API Key 9Router |
+| `GOOGLE_AI_STUDIO_API_KEY` | — | — | API Key Google AI Studio (fallback) |
+| `GOOGLE_AI_STUDIO_MODEL` | — | `gemma-4-31b-it` | Model Gemini (harus support vision) |
 | `SMTP_SERVER` | ✅ | — | Server SMTP (contoh: `smtp.gmail.com`) |
 | `SMTP_PORT` | ✅ | `587` | Port SMTP |
 | `SMTP_SECURE` | — | `false` | `true` untuk port 465 |
@@ -138,6 +156,6 @@ Buka browser: **http://localhost:3000**
 ## Tech Stack
 
 - **Backend:** Express.js, Multer, Nodemailer, Winston
-- **AI:** OpenAI SDK → 9Router API
+- **AI:** OpenAI SDK → 9Router API (primer) / Google AI Studio Gemini (fallback otomatis)
 - **Frontend:** Tailwind CSS (CDN)
 - **Rate limiting:** express-rate-limit

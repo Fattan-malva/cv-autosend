@@ -3,6 +3,7 @@ const multer = require('multer');
 const dotenv = require('dotenv');
 const nodemailer = require('nodemailer');
 const { OpenAI } = require('openai');
+const { GoogleGenAI } = require('@google/genai');
 const rateLimit = require('express-rate-limit');
 const cors = require('cors');
 const winston = require('winston');
@@ -43,7 +44,7 @@ const emailLimiter = rateLimit({
   message: { error: 'Terlalu banyak pengiriman email. Coba lagi dalam 1 menit.' },
 });
 
-// ── Multer (memory storage with validation) ──────────────────────────────
+// ── Multer (memory storage for images) ──────────────────────────────────
 const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 const ALLOWED_CV_MIME = ['application/pdf'];
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -61,11 +62,9 @@ const upload = multer({
   },
 });
 
+// CV upload — simpan langsung via buffer (lebih robust dari diskStorage)
 const uploadCv = multer({
-  storage: multer.diskStorage({
-    destination: path.join(__dirname, 'resource'),
-    filename: () => 'cv.pdf',
-  }),
+  storage: multer.memoryStorage(),
   limits: { fileSize: MAX_FILE_SIZE },
   fileFilter: (_req, file, cb) => {
     if (ALLOWED_CV_MIME.includes(file.mimetype)) {
@@ -76,11 +75,30 @@ const uploadCv = multer({
   },
 });
 
-// ── OpenAI (9Router) ─────────────────────────────────────────────────────
-const openai = new OpenAI({
-  baseURL: process.env['9ROUTER_API_BASE'] || 'https://api.9router.ai/v1',
-  apiKey: process.env['9ROUTER_API_KEY'],
-});
+// ── AI Providers (9Router → GROQ fallback) ──────────────────────────────
+const aiProviders = [];
+
+if (process.env['9ROUTER_API_KEY']) {
+  aiProviders.push({
+    name: '9Router',
+    client: new OpenAI({
+      baseURL: process.env['9ROUTER_API_BASE'] || 'https://api.9router.ai/v1',
+      apiKey: process.env['9ROUTER_API_KEY'],
+    }),
+    model: process.env['9ROUTER_MODEL'] || 'gpt-4o',
+  });
+}
+
+if (process.env['GOOGLE_AI_STUDIO_API_KEY']) {
+  aiProviders.push({
+    name: 'Gemini',
+    type: 'native_gemini',
+    client: new GoogleGenAI({
+      apiKey: process.env['GOOGLE_AI_STUDIO_API_KEY'],
+    }),
+    model: process.env['GOOGLE_AI_STUDIO_MODEL'] || 'gemini-2.5-flash',
+  });
+}
 
 function buildAnalysisPrompt(senderName) {
   return `Analisis gambar brosur lowongan kerja ini. Ekstrak informasi berikut dan kembalikan HANYA dalam format JSON murni tanpa markdown:
@@ -93,44 +111,79 @@ function buildAnalysisPrompt(senderName) {
 }`;
 }
 
-async function analyzeWithRetry(base64Image, mimeType, senderName, retries = 2) {
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      const response = await openai.chat.completions.create({
-        model: process.env['9ROUTER_MODEL'] || 'gpt-4o',
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: buildAnalysisPrompt(senderName) },
-              { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64Image}` } },
-            ],
-          },
-        ],
-        temperature: 0.4,
-        max_tokens: 3000,
-      });
+function parseResponse(rawText, senderName) {
+  rawText = rawText.replace(/^```json\s*/i, '').replace(/```$/g, '').trim();
+  const parsed = JSON.parse(rawText);
+  if (parsed.kata_pengantar) {
+    parsed.kata_pengantar = parsed.kata_pengantar
+      .replace(/\[Nama Anda\]/gi, senderName)
+      .replace(/\[Nama Lengkap\]/gi, senderName)
+      .replace(/\[Nama\]/gi, senderName);
+  }
+  return parsed;
+}
 
-      let rawText = response.choices[0].message.content.trim();
-      rawText = rawText.replace(/^```json\s*/i, '').replace(/```$/g, '').trim();
-      const parsed = JSON.parse(rawText);
-      if (parsed.kata_pengantar) {
-        parsed.kata_pengantar = parsed.kata_pengantar
-          .replace(/\[Nama Anda\]/gi, senderName)
-          .replace(/\[Nama Lengkap\]/gi, senderName)
-          .replace(/\[Nama\]/gi, senderName);
-      }
-      return parsed;
-    } catch (err) {
-      if (attempt < retries) {
-        const delay = Math.pow(2, attempt) * 1000;
-        logger.warn(`Retry ${attempt + 1}/${retries} after ${delay}ms`, { error: err.message });
-        await new Promise((r) => setTimeout(r, delay));
-      } else {
-        throw err;
+async function analyzeWithRetry(base64Image, mimeType, senderName) {
+  const errors = [];
+
+  for (const provider of aiProviders) {
+    const retries = provider.name === '9Router' ? 2 : 1;
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        let rawText;
+
+        if (provider.type === 'native_gemini') {
+          const response = await provider.client.models.generateContent({
+            model: provider.model,
+            contents: [
+              buildAnalysisPrompt(senderName),
+              {
+                inlineData: {
+                  data: base64Image,
+                  mimeType: mimeType,
+                },
+              },
+            ],
+            config: {
+              temperature: 0.2,
+              responseMimeType: 'application/json',
+            },
+          });
+          rawText = response.text;
+        } else {
+          const response = await provider.client.chat.completions.create({
+            model: provider.model,
+            messages: [
+              {
+                role: 'user',
+                content: [
+                  { type: 'text', text: buildAnalysisPrompt(senderName) },
+                  { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64Image}` } },
+                ],
+              },
+            ],
+            temperature: 0.4,
+            max_tokens: 3000,
+          });
+          rawText = response.choices[0].message.content;
+        }
+
+        const data = parseResponse(rawText, senderName);
+        logger.info(`Analisis berhasil via ${provider.name} (${provider.model})`);
+        return data;
+      } catch (err) {
+        errors.push({ provider: provider.name, attempt: attempt + 1, error: err.message });
+        logger.warn(`${provider.name} attempt ${attempt + 1}/${retries + 1} gagal`, { error: err.message });
+        if (attempt < retries) {
+          await new Promise((r) => setTimeout(r, 1000));
+        }
       }
     }
+    logger.warn(`${provider.name} habis, lanjut ke provider berikutnya...`);
   }
+
+  const summary = errors.map(e => `${e.provider} (${e.error})`).join('; ');
+  throw new Error(`Semua AI provider gagal: ${summary}`);
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────
@@ -206,17 +259,27 @@ app.post('/api/config', (req, res) => {
   res.json({ success: true, SENDER_NAME: process.env.SENDER_NAME });
 });
 
-// Upload CV
+// Upload CV — simpan ke resource/cv.pdf dari buffer (atasi lock file)
 app.post('/api/upload-cv', (req, res) => {
-  uploadCv.single('cv')(req, res, (err) => {
+  uploadCv.single('cv')(req, res, async (err) => {
     if (err) {
       return res.status(400).json({ error: err.message });
     }
     if (!req.file) {
       return res.status(400).json({ error: 'Tidak ada file CV yang diupload.' });
     }
-    logger.info('CV uploaded:', req.file.originalname);
-    res.json({ success: true, message: 'CV berhasil diupload.', fileName: req.file.originalname });
+    try {
+      const cvPath = path.join(__dirname, 'resource', 'cv.pdf');
+      if (fs.existsSync(cvPath)) {
+        fs.unlinkSync(cvPath);
+      }
+      fs.writeFileSync(cvPath, req.file.buffer);
+      logger.info('CV uploaded:', req.file.originalname);
+      res.json({ success: true, message: 'CV berhasil diupload.', fileName: req.file.originalname });
+    } catch (writeErr) {
+      logger.error('Gagal menyimpan CV', { error: writeErr.message });
+      res.status(500).json({ error: 'Gagal menyimpan CV: ' + writeErr.message });
+    }
   });
 });
 
@@ -353,6 +416,8 @@ app.use((err, _req, res, _next) => {
 // ── Start ─────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
   logger.info(`Server berjalan di http://localhost:${PORT}`);
-  if (!process.env['9ROUTER_API_KEY']) logger.warn('9ROUTER_API_KEY belum diisi di .env');
+  if (aiProviders.length === 0) logger.warn('Tidak ada AI provider (9Router / Gemini) dikonfigurasi di .env');
+  if (process.env['9ROUTER_API_KEY']) logger.info(`9Router: ${process.env['9ROUTER_MODEL'] || 'gpt-4o'}`);
+  if (process.env['GOOGLE_AI_STUDIO_API_KEY']) logger.info(`Gemini (SDK asli): ${process.env['GOOGLE_AI_STUDIO_MODEL'] || 'gemini-2.5-flash'}`);
   if (!process.env.SMTP_SERVER) logger.warn('Konfigurasi SMTP belum lengkap di .env');
 });

@@ -311,23 +311,35 @@
     cvInput.addEventListener('change', async () => {
       const file = cvInput.files[0];
       if (!file) return;
-      if (file.type !== 'application/pdf') { showToast('File harus PDF', 'error'); return; }
-      if (file.size > 10 * 1024 * 1024) { showToast('File terlalu besar (maks 10MB)', 'error'); return; }
+      if (file.type !== 'application/pdf') { showToast('File harus PDF', 'error'); cvInput.value = ''; return; }
+      if (file.size > 10 * 1024 * 1024) { showToast('File terlalu besar (maks 10MB)', 'error'); cvInput.value = ''; return; }
 
       cvStatus.textContent = 'Mengupload...';
+      cvStatus.className = 'text-xs text-amber-500 mt-1';
       const fd = new FormData();
       fd.append('cv', file);
       try {
         const res = await fetch('/api/upload-cv', { method: 'POST', body: fd });
         if (res.ok) {
           cvStatus.textContent = 'CV tersedia ✓';
+          cvStatus.className = 'text-xs text-green-600 dark:text-green-400 mt-1';
           showToast('CV berhasil diupload', 'success');
+          // Refresh config biar hasCV terbaru
+          const cfgRes = await fetch('/api/config');
+          const cfg = await cfgRes.json();
+          state.senderName = cfg.SENDER_NAME || state.senderName;
         } else {
           const err = await res.json().catch(() => ({}));
           showToast(err.error || 'Gagal upload CV', 'error');
           cvStatus.textContent = 'Gagal upload';
+          cvStatus.className = 'text-xs text-red-500 mt-1';
         }
-      } catch { showToast('Gagal upload CV', 'error'); cvStatus.textContent = 'Gagal upload'; }
+      } catch {
+        showToast('Gagal upload CV', 'error');
+        cvStatus.textContent = 'Gagal upload';
+        cvStatus.className = 'text-xs text-red-500 mt-1';
+      }
+      cvInput.value = ''; // reset biar bisa pilih file yg sama lagi
     });
 
     // ── File selection ────────────────────────────────────────────────────
